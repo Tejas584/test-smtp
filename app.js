@@ -9,7 +9,7 @@ const csv = require('csv-parser');
 const { emailQueue, queueEvents, setIO } = require('./queue');
 const { getStatus, resetStatus, getErrors } = require('./status');
 
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 // Multer setup for file uploads
 const upload = multer({ dest: 'uploads/' });
