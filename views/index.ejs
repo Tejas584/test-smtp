@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Mailer</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+
+    body {
+      margin: 0;
+      padding: 1rem;
+      background: #f4f6f9;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .container {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 2rem;
+      width: 100%;
+      max-width: 1200px;
+    }
+
+    form {
+      background: #fff;
+      padding: 2rem;
+      border-radius: 10px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+      flex: 1 1 350px;
+      min-width: 300px;
+      max-width: 500px;
+    }
+
+    form h1 {
+      font-size: 1.2rem;
+      margin-bottom: 1rem;
+      color: #333;
+    }
+
+    form p {
+      margin-bottom: 0.5rem;
+      font-weight: 500;
+      color: #444;
+    }
+
+    input[type="text"],
+    input[type="file"],
+    textarea {
+      width: 100%;
+      padding: 0.6rem;
+      margin-bottom: 1rem;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-size: 1rem;
+      resize: vertical;
+    }
+
+    input:focus, textarea:focus {
+      border-color: #007bff;
+      outline: none;
+    }
+
+    button {
+      width: 100%;
+      padding: 0.8rem;
+      background: #007bff;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-weight: bold;
+      cursor: pointer;
+      font-size: 1rem;
+      transition: background 0.3s ease;
+    }
+
+    button:hover {
+      background: #0056b3;
+    }
+
+    .panel {
+      background: #fff;
+      padding: 1.5rem;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+      flex: 1 1 300px;
+      max-width: 500px;
+    }
+
+    .panel h2 {
+      font-size: 1rem;
+      color: #333;
+      margin-bottom: 1rem;
+    }
+
+    #errors ul {
+      padding-left: 1.2em;
+      margin: 0;
+      color: #b00;
+    }
+
+    #form-errors {
+      display: none;
+      margin-bottom: 1rem;
+      background: #ffeaea;
+      color: #b00;
+      padding: 1rem;
+      border-radius: 8px;
+      width: 100%;
+      max-width: 500px;
+      font-size: 0.98rem;
+    }
+
+    @media (max-width: 600px) {
+      .container {
+        flex-direction: column;
+        align-items: center;
+      }
+
+      form, .panel, #form-errors {
+        width: 100%;
+        max-width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  
+
+  <div class="container">
+    
+    <form id="emailForm" action="" method="post" enctype="multipart/form-data">
+      <p>Recipients File</p>
+      <input type="file" name="recipients" id="recipients" />
+
+      <h1>SMTP Credentials</h1>
+      <input type="text" name="host" placeholder="SMTP Host" />
+      <input type="text" name="port" placeholder="SMTP Port" />
+      <input type="text" name="user" placeholder="SMTP User ID" />
+      <input type="text" name="password" placeholder="SMTP Password" />
+
+      <input type="text" name="senderName" placeholder="Sender Name" />
+      <input type="text" name="from" placeholder="Sender Email" />
+      <input type="text" name="subject" placeholder="Subject" />
+      <label for="messageFormat">Message Format:</label>
+      <select name="messageFormat" id="messageFormat" style="margin-bottom: 1rem; width: 100%; padding: 0.6rem; border-radius: 6px; border: 1px solid #ccc;">
+        <option value="plain">Plain Text</option>
+        <option value="html">HTML</option>
+      </select>
+      <textarea name="message" placeholder="Message" rows="5"></textarea>
+
+      <button type="submit">Send Emails</button>
+    </form>
+
+    <div class="panel" id="status">
+      <h2>Live Email Status</h2>
+      <p>Sent: <span id="sent">0</span></p>
+      <p>Failed: <span id="failed">0</span></p>
+      <p>Retried: <span id="retried">0</span></p>
+    </div>
+
+    <div class="panel" id="errors">
+      <h2>Error Messages</h2>
+      <ul id="form-errors"></ul>
+      <ul id="error-list"></ul>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+
+    socket.on('status', (data) => {
+      document.getElementById('sent').textContent = data.success;
+      document.getElementById('failed').textContent = data.failed;
+      document.getElementById('retried').textContent = data.retry;
+    });
+
+    socket.on('errors', (errors) => {
+      const list = document.getElementById('error-list');
+      list.innerHTML = '';
+      if (errors?.length) {
+        errors.forEach(e => {
+          const li = document.createElement('li');
+          li.textContent = `To: ${e.to} — ${e.error}`;
+          list.appendChild(li);
+        });
+      }
+    });
+
+    document.getElementById('emailForm').addEventListener('submit', async function(e) {
+      e.preventDefault();
+      const form = e.target;
+      const formData = new FormData(form);
+      const errorDiv = document.getElementById('form-errors');
+      errorDiv.style.display = 'none';
+      errorDiv.innerHTML = '';
+      try {
+        const res = await fetch(form.action || '/', {
+          method: 'POST',
+          body: formData,
+          headers: { 'Accept': 'application/json' }
+        });
+
+        if (!res.ok) {
+          const data = await res.json();
+          if (data.errors) {
+            errorDiv.innerHTML = data.errors.map(e => `<div>${e}</div>`).join('');
+            errorDiv.style.display = 'block';
+          }
+        } else {
+          errorDiv.style.display = 'none';
+          form.reset();
+        }
+      } catch (err) {
+        errorDiv.innerHTML = 'An unexpected error occurred.';
+        errorDiv.style.display = 'block';
+      }
+    });
+  </script>
+</body>
+</html>
